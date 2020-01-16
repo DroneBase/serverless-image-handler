@@ -179,14 +179,11 @@ let upload_recursive_dir = function(base_tmpdir, path, dstBucket, s3_key) {
         }
         filenames.forEach(function(filename) {
             console.log('filename', filename);
-            // get current file extension
-            const ext = path.parse(filename).ext;
-            // get current file path
-            const filepath = path.resolve(base, filename);
 
-           if (false){
-                upload_recursive_dir("#{basedir}", "#{path}#{basename}/");
-            }  else if(filename.endsWith('.xml')) {
+           if (false) {
+                let new_path = '/' + filename;
+                upload_recursive_dir(base_tmpdir + new_path, path + new_path, dstBucket, s3_key);
+            } else if(filename.endsWith('.xml')) {
                 fs.open(base_tmpdir + '/ImageProperties.xml', 'rb', function (err, file) {
                     if (err) throw err;
                     s3.putObject({
@@ -196,10 +193,11 @@ let upload_recursive_dir = function(base_tmpdir, path, dstBucket, s3_key) {
                         Body: file
                     });
                 });
+
             }
-        }
+        });
     });
-};
+}
 
 /**
  * Gets the original image from an Amazon S3 bucket.
