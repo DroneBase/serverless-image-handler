@@ -16,6 +16,8 @@
 console.log('Loading function');
 
 const AWS = require('aws-sdk');
+const fs = require('fs');
+const path = require('path');
 const S3 = require('aws-sdk/clients/s3');
 const s3 = new S3();
 const sharp = require('sharp');
@@ -38,28 +40,9 @@ exports.handler = (event, context, callback) => {
     let responseStatus = 'FAILED';
     let responseData = {};
     if(event.Records[0]['eventName'] == "ObjectCreated:Put") {
-        let originalImage = getOriginalImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
+        let originalImage = tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
         console.log('originalImage', originalImage);
-
-
-            // try {
-            //     // const overlayImage = await request;
-            //     image.png().tile({
-            //         size: 512,
-            //         layout: 'zoomify'
-            //       }).toFile('tiled.dz', function(err, info) {
-            //         console.log(info)
-            //         // output.dzi is the Deep Zoom XML definition
-            //         // output_files contains 512x512 tiles grouped by zoom level
-            //       });
-            //       sendResponse(event, callback, context.logStreamName, 'SUCCESS');
-            // } catch (err) {
-            //     return Promise.reject({
-            //         status: 500,
-            //         code: err.code,
-            //         message: err.message
-            //     })
-            // }
+        // sendResponse(event, callback, context.logStreamName, 'SUCCESS');
     }
     if (event.RequestType === 'Create') {
         console.log('Request type is create');
@@ -162,23 +145,75 @@ exports.handler = (event, context, callback) => {
  * @param {String} key - The key name corresponding to the image.
  * @return {Promise} - The original image or an error.
  */
-let getOriginalImage = function(bucket, key) {
-    // const imageLocation = { Bucket: bucket, Key: key };
-    const imageLocation = { Bucket: 'dronebase-development', Key: '/assets/mission/images/101284-6fefcbfcc3053d15f186944b50f467ca0e61d279/original-0c41dea38ae1a6ada4067241138ab4f8487e181f.JPG' };
-
+let tileImage = async function(bucket, key) {
     try {
-        const originalImage = s3.getObject(imageLocation);
+        const originalImage = await getOriginalImage(bucket, key);
         const image = sharp(originalImage);
-        image.png().tile({
+        const tiles = image.png().tile({
             size: 512,
             layout: 'zoomify'
-          }).toFile('tiled.dz', function(err, info) {
+          }).toFile('/tmp/tiled.dz', function(err, info) {
             console.log('error', err);
             console.log('info', info);
+            upload_recursive_dir('/tmp/tiled', '', bucket, key);
+        });
             // output.dzi is the Deep Zoom XML definition
             // output_files contains 512x512 tiles grouped by zoom level
-          });
+            // console.log('tiles', tiles);
+
         return 'successfully loaded image';
+    }
+    catch(err) {
+        return Promise.reject({
+            status: 500,
+            code: err.code,
+            message: err.message
+        })
+    }
+}
+
+let upload_recursive_dir = function(base_tmpdir, path, dstBucket, s3_key) {
+    fs.readdir(base_tmpdir, function(err, filenames) {
+        if (err) {
+          return;
+        }
+        filenames.forEach(function(filename) {
+            console.log('filename', filename);
+            // get current file extension
+            const ext = path.parse(filename).ext;
+            // get current file path
+            const filepath = path.resolve(base, filename);
+
+           if (false){
+                upload_recursive_dir("#{basedir}", "#{path}#{basename}/");
+            }  else if(filename.endsWith('.xml')) {
+                fs.open(base_tmpdir + '/ImageProperties.xml', 'rb', function (err, file) {
+                    if (err) throw err;
+                    s3.putObject({
+                        Bucket: dstBucket,
+                        // Key: s3_key,
+                        Key: 'assets/mission/images/101284-6fefcbfcc3053d15f186944b50f467ca0e61d279/tiles',
+                        Body: file
+                    });
+                });
+            }
+        }
+    });
+};
+
+/**
+ * Gets the original image from an Amazon S3 bucket.
+ * @param {String} bucket - The name of the bucket containing the image.
+ * @param {String} key - The key name corresponding to the image.
+ * @return {Promise} - The original image or an error.
+ */
+let getOriginalImage = async function(bucket, key) {
+    // const imageLocation = { Bucket: bucket, Key: key };
+    const imageLocation = { Bucket: 'dronebase-development', Key: 'assets/mission/images/101284-6fefcbfcc3053d15f186944b50f467ca0e61d279/original-0c41dea38ae1a6ada4067241138ab4f8487e181f.JPG' };
+    const request = s3.getObject(imageLocation).promise();
+    try {
+        const originalImage = await request;
+        return Promise.resolve(originalImage.Body);
     }
     catch(err) {
         return Promise.reject({
