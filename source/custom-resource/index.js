@@ -36,106 +36,20 @@ exports.handler = (event, context, callback) => {
     console.log('Received event context:', context);
     console.log('Received event.RequestType:', event.RequestType);
     console.log('Received event.Records[0]:', event.Records[0]);
-
-    let responseStatus = 'FAILED';
-    let responseData = {};
-    if(event.Records[0]['eventName'] == "ObjectCreated:Put") {
-        let originalImage = tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
-        console.log('originalImage', originalImage);
-        // sendResponse(event, callback, context.logStreamName, 'SUCCESS');
-    }
-    if (event.RequestType === 'Create') {
-        console.log('Request type is create');
-        if (event.ResourceProperties.customAction === 'putConfigFile') {
-            let _s3Helper = new S3Helper();
-            console.log(event.ResourceProperties.configItem);
-            _s3Helper.putConfigFile(event.ResourceProperties.configItem, event.ResourceProperties.destS3Bucket, event.ResourceProperties.destS3key).then((data) => {
-                responseStatus = 'SUCCESS';
-                responseData = setting;
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-            }).catch((err) => {
-                responseData = {
-                    Error: `Saving config file to ${event.ResourceProperties.destS3Bucket}/${event.ResourceProperties.destS3key} failed`
-                };
-                console.log([responseData.Error, ':\n', err].join(''));
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-            });
-
-        } else if (event.ResourceProperties.customAction === 'copyS3assets') {
-            let _s3Helper = new S3Helper();
-
-            _s3Helper.copyAssets(event.ResourceProperties.manifestKey,
-                event.ResourceProperties.sourceS3Bucket, event.ResourceProperties.sourceS3key,
-                event.ResourceProperties.destS3Bucket).then((data) => {
-                responseStatus = 'SUCCESS';
-                responseData = {};
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-            }).catch((err) => {
-                responseData = {
-                    Error: `Copy of website assets failed`
-                };
-                console.log([responseData.Error, ':\n', err].join(''));
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-            });
-
-        } else if (event.ResourceProperties.customAction === 'createUuid') {
-            responseStatus = 'SUCCESS';
-            responseData = {
-                UUID: uuidv4()
-            };
-            sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-
-        } else if (event.ResourceProperties.customAction === 'checkSourceBuckets') {
-            let _s3Helper = new S3Helper();
-
-            _s3Helper.validateBuckets(event.ResourceProperties.sourceBuckets).then((data) => {
-                responseStatus = 'SUCCESS';
-                responseData = {};
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData);
-            }).catch((err) => {
-                responseData = {
-                    Error: `Could not find the following source bucket(s) in your account: ${err}. Please specify at least one source bucket that exists within your account and try again. If specifying multiple source buckets, please ensure that they are comma-separated.`
-                };
-                console.log(responseData.Error);
-                sendResponse(event, callback, context.logStreamName, responseStatus, responseData, responseData.Error);
-            });
-
-        } else if (event.ResourceProperties.customAction === 'sendMetric') {
-            if (event.ResourceProperties.anonymousData === 'Yes') {
-                let _metric = {
-                    Solution: event.ResourceProperties.solutionId,
-                    UUID: event.ResourceProperties.UUID,
-                    TimeStamp: moment().utc().format('YYYY-MM-DD HH:mm:ss.S'),
-                    Data: {
-                        Version: event.ResourceProperties.version,
-                        Launch: moment().utc().format()
-                    }
-                };
-
-                let _usageMetrics = new UsageMetrics();
-                _usageMetrics.sendAnonymousMetric(_metric).then((data) => {
-                    console.log(data);
-                    console.log('Annonymous metrics successfully sent.');
-                }).catch((err) => {
-                    console.log(`Sending anonymous launch metric failed: ${err}`);
-                });
-
-                sendResponse(event, callback, context.logStreamName, 'SUCCESS', {});
-            } else {
-                sendResponse(event, callback, context.logStreamName, 'SUCCESS');
-            }
-
-        } else {
+    if(event.Records[0]['eventName'] == "ObjectCreated:Put" && event.Records[0].s3.object.key.endsWith('/tiles')){
+        tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
+        if(event.ResponseURL) {
             sendResponse(event, callback, context.logStreamName, 'SUCCESS');
         }
     }
 
+    if (event.RequestType === 'Create') {
+        console.log('Request type is create');
+    }
+
     if (event.RequestType === 'Update') {
-
         console.log('Request type is update');
-
         sendResponse(event, callback, context.logStreamName, 'SUCCESS');
-
     }
 };
 
@@ -155,7 +69,7 @@ let tileImage = async function(bucket, key) {
           }).toFile('/tmp/tiled.dz', function(err, info) {
             console.log('error', err);
             console.log('info', info);
-            upload_recursive_dir('/tmp/tiled', '', bucket, key);
+            upload_recursive_dir('/tmp/tiled', bucket, key);
         });
             // output.dzi is the Deep Zoom XML definition
             // output_files contains 512x512 tiles grouped by zoom level
@@ -172,32 +86,6 @@ let tileImage = async function(bucket, key) {
     }
 }
 
-let upload_recursive_dir = function(base_tmpdir, path, dstBucket, s3_key) {
-    fs.readdir(base_tmpdir, function(err, filenames) {
-        if (err) {
-          return;
-        }
-        filenames.forEach(function(filename) {
-            console.log('filename', filename);
-
-           if (false) {
-                let new_path = '/' + filename;
-                upload_recursive_dir(base_tmpdir + new_path, path + new_path, dstBucket, s3_key);
-            } else if(filename.endsWith('.xml')) {
-                fs.open(base_tmpdir + '/ImageProperties.xml', 'rb', function (err, file) {
-                    if (err) throw err;
-                    s3.putObject({
-                        Bucket: dstBucket,
-                        // Key: s3_key,
-                        Key: 'assets/mission/images/101284-6fefcbfcc3053d15f186944b50f467ca0e61d279/tiles',
-                        Body: file
-                    });
-                });
-
-            }
-        });
-    });
-}
 
 /**
  * Gets the original image from an Amazon S3 bucket.
@@ -205,9 +93,42 @@ let upload_recursive_dir = function(base_tmpdir, path, dstBucket, s3_key) {
  * @param {String} key - The key name corresponding to the image.
  * @return {Promise} - The original image or an error.
  */
-let getOriginalImage = async function(bucket, key) {
-    // const imageLocation = { Bucket: bucket, Key: key };
-    const imageLocation = { Bucket: 'dronebase-development', Key: 'assets/mission/images/101284-6fefcbfcc3053d15f186944b50f467ca0e61d279/original-0c41dea38ae1a6ada4067241138ab4f8487e181f.JPG' };
+let getOriginalImage = async function(bucket, tilesKey) {
+
+    console.log('tilesKey', tilesKey);
+    const imagesLocation = tilesKey.split('/tiles')[0]
+    console.log('imagesLocation', imagesLocation);
+    let images = await getImageObjects(bucket, imagesLocation);
+    let originalObject = images.find(isOriginal);
+    console.log('originalObject filename', originalObject.Key);
+    return downloadImage(bucket, originalObject.Key);
+}
+
+function isOriginal(fileObject) {
+    return fileObject.Key.includes("/original-");
+}
+
+let getImageObjects = async function(bucket, location) {
+    const request = s3.listObjects({
+        Bucket: bucket,
+        Marker: location,
+        MaxKeys: 10
+    }).promise();
+    try {
+        const imageObjects = await request;
+        return Promise.resolve(imageObjects.Contents);
+    }
+    catch(err) {
+        return Promise.reject({
+            status: 500,
+            code: err.code,
+            message: err.message
+        })
+    }
+}
+
+let downloadImage = async function(bucket, key){
+    let imageLocation = { Bucket: bucket, Key: key };
     const request = s3.getObject(imageLocation).promise();
     try {
         const originalImage = await request;
@@ -220,6 +141,41 @@ let getOriginalImage = async function(bucket, key) {
             message: err.message
         })
     }
+}
+
+
+let upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key) {
+    fs.readdir(base_tmpdir, function(err, filenames) {
+        if (err) {
+          return;
+        }
+        filenames.forEach(function(filename) {
+            console.log('filename', filename);
+            let curr_file = '/' + filename;
+            let local_temp_path = base_tmpdir + curr_file;
+            let destS3key = s3_key + curr_file;
+            console.log('curr_file', curr_file);
+            console.log('local_temp_path', local_temp_path);
+            console.log('destS3key', destS3key);
+           if (fs.lstatSync(local_temp_path).isDirectory()) {
+                upload_recursive_dir(local_temp_path, destS3Bucket, destS3key);
+            } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
+                fs.readFile(local_temp_path, function (err, file) {
+                    if (err) console.log(err, err.stack); // an error occurred
+                    let params = {
+                        Bucket: destS3Bucket,
+                        Key: destS3key,
+                        Body: file
+                    }
+                    s3.putObject(params, function(err, data) {
+                       if (err) console.log(err, err.stack); // an error occurred
+                       else     console.log(data);           // successful response
+                     });
+                });
+
+            }
+        });
+    });
 }
 
 /**
