@@ -68,14 +68,10 @@ let tileImage = async function(bucket, key) {
             layout: 'zoomify'
           }).toFile('/tmp/tiled.dz', function(err, info) {
             console.log('error', err);
-            console.log('info', info);
+            // console.log('info', info);
             upload_recursive_dir('/tmp/tiled', bucket, key);
+            // console.log('successfully uploaded tiled images');
         });
-            // output.dzi is the Deep Zoom XML definition
-            // output_files contains 512x512 tiles grouped by zoom level
-            // console.log('tiles', tiles);
-
-        return 'successfully loaded image';
     }
     catch(err) {
         return Promise.reject({
@@ -94,13 +90,10 @@ let tileImage = async function(bucket, key) {
  * @return {Promise} - The original image or an error.
  */
 let getOriginalImage = async function(bucket, tilesKey) {
-
-    console.log('tilesKey', tilesKey);
     const imagesLocation = tilesKey.split('/tiles')[0]
-    console.log('imagesLocation', imagesLocation);
     let images = await getImageObjects(bucket, imagesLocation);
     let originalObject = images.find(isOriginal);
-    console.log('originalObject filename', originalObject.Key);
+    // console.log('originalObject filename', originalObject.Key);
     return downloadImage(bucket, originalObject.Key);
 }
 
@@ -154,10 +147,7 @@ let upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key) {
             let curr_file = '/' + filename;
             let local_temp_path = base_tmpdir + curr_file;
             let destS3key = s3_key + curr_file;
-            console.log('curr_file', curr_file);
-            console.log('local_temp_path', local_temp_path);
-            console.log('destS3key', destS3key);
-           if (fs.lstatSync(local_temp_path).isDirectory()) {
+            if (fs.lstatSync(local_temp_path).isDirectory()) {
                 upload_recursive_dir(local_temp_path, destS3Bucket, destS3key);
             } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
                 fs.readFile(local_temp_path, function (err, file) {
