@@ -182,7 +182,7 @@ let upload_recursive_dir = function(base_tmpdir, s3_key, promises) {
 
 let deleteFolderRecursive = function (directory_path) {
     if (fs.existsSync(directory_path)) {
-        // console.log('removing folder: ', directory_path);
+        console.log('removing folder: ', directory_path);
         fs.readdirSync(directory_path).forEach(function (file, index) {
             var currentPath = path.join(directory_path, file);
             if (fs.lstatSync(currentPath).isDirectory()) {
