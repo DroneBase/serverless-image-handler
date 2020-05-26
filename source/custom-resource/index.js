@@ -34,17 +34,9 @@ exports.handler = (event, context, callback) => {
         event.Records[0].s3.object.key.endsWith('/tiles/')){
         tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
         if(event.ResponseURL) {
+            console.log("ResponseURL", event.ResponseURL)
             sendResponse(event, callback, context.logStreamName, 'SUCCESS');
         }
-    }
-
-    if (event.RequestType === 'Create') {
-        console.log('Request type is create');
-    }
-
-    if (event.RequestType === 'Update') {
-        console.log('Request type is update');
-        sendResponse(event, callback, context.logStreamName, 'SUCCESS');
     }
 };
 
