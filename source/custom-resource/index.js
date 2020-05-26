@@ -18,11 +18,8 @@ console.log('Loading function');
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
-const S3 = require('aws-sdk/clients/s3');
-const s3 = new S3();
+const s3 = new AWS.S3();
 const sharp = require('sharp');
-const https = require('https');
-const url = require('url');
 
 /**
  * Request handler.
@@ -30,13 +27,13 @@ const url = require('url');
 exports.handler = (event, context, callback) => {
     console.log('Received key:', event.Records[0].s3.object.key);
 
+    if(event.ResponseURL) {
+        console.log('Event:', event);
+    }
+
     if(event.Records[0]['eventName'] == "ObjectCreated:Put" &&
         event.Records[0].s3.object.key.endsWith('/tiles/')){
         tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
-        if(event.ResponseURL) {
-            console.log("ResponseURL", event.ResponseURL)
-            sendResponse(event, callback, context.logStreamName, 'SUCCESS');
-        }
     }
 };
 
@@ -61,23 +58,21 @@ let tileImage = async function(bucket, key) {
                 console.log('err', err);
             } else {
                 console.log('successfully tiled images ' + tmp_location);
-                Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(errs, data) {
+                return Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(errs, data) {
                         if (errs.length) console.log('errors ', errs);// an error occurred
                         console.log('successfully uploaded tiled images');
                     }).catch(function(exception) {
                         console.log('caught exception', exception);
+                        throw exception;
                     }).finally(function() {
                         deleteFolderRecursive(tmp_location + 'tiled/');
                         console.log('successfully deleted tmp files');
-                    });;
+                    });
             }
         });
     } catch(err) {
-        return Promise.reject({
-            status: 500,
-            code: err.code,
-            message: err.message
-        })
+        console.error('failed to tileImage', err);
+        throw err;
     }
 }
 
@@ -110,11 +105,8 @@ let getImageObjects = async function(bucket, location) {
         return Promise.resolve(imageObjects.Contents);
     }
     catch(err) {
-        return Promise.reject({
-            status: 500,
-            code: err.code,
-            message: err.message
-        })
+        console.error('failed to getImageObjects', err);
+        throw err;
     }
 }
 
@@ -126,11 +118,8 @@ let downloadImage = async function(bucket, key){
         return Promise.resolve(originalImage.Body);
     }
     catch(err) {
-        return Promise.reject({
-            status: 500,
-            code: err.code,
-            message: err.message
-        })
+        console.error('failed to downloadImage', err);
+        throw err;
     }
 }
 
@@ -171,50 +160,4 @@ let deleteFolderRecursive = function (directory_path) {
         });
         fs.rmdirSync(directory_path); // delete directories
     }
-};
-
-/**
- * Sends a response to the pre-signed S3 URL
- */
-let sendResponse = function(event, callback, logStreamName, responseStatus, responseData, customReason) {
-
-    const defaultReason = `See the details in CloudWatch Log Stream: ${logStreamName}`;
-    const reason = (customReason !== undefined) ? customReason : defaultReason;
-
-    const responseBody = JSON.stringify({
-        Status: responseStatus,
-        Reason: reason,
-        PhysicalResourceId: logStreamName,
-        StackId: event.StackId,
-        RequestId: event.RequestId,
-        LogicalResourceId: event.LogicalResourceId,
-        Data: responseData,
-    });
-
-    console.log('RESPONSE BODY:\n', responseBody);
-    const parsedUrl = url.parse(event.ResponseURL);
-    const options = {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: parsedUrl.path,
-        method: 'PUT',
-        headers: {
-            'Content-Type': '',
-            'Content-Length': responseBody.length,
-        }
-    };
-
-    const req = https.request(options, (res) => {
-        console.log('STATUS:', res.statusCode);
-        console.log('HEADERS:', JSON.stringify(res.headers));
-        callback(null, 'Successfully sent stack response!');
-    });
-
-    req.on('error', (err) => {
-        console.log('sendResponse Error:\n', err);
-        callback(err);
-    });
-
-    req.write(responseBody);
-    req.end();
 };
