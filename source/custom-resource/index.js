@@ -13,103 +13,103 @@
 
 'use strict';
 
-console.log('Loading function');
+// console.log('Loading function');
 
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
-const S3 = require('aws-sdk/clients/s3');
-const s3 = new S3();
+const s3 = new AWS.S3();
 const sharp = require('sharp');
-const https = require('https');
-const url = require('url');
+// const https = require('https');
+// const url = require('url').URL;
+const axios = require('axios');
 
 /**
  * Request handler.
  */
-exports.handler = (event, context, callback) => {
-    console.log('Received key:', event.Records[0].s3.object.key);
-
-    if(event.Records[0]['eventName'] == "ObjectCreated:Put" &&
-        event.Records[0].s3.object.key.endsWith('/tiles/')){
-        tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
-        if(event.ResponseURL) {
-            sendResponse(event, callback, context.logStreamName, 'SUCCESS');
+exports.handler = async (event, context) => {
+    // console.log('!! logging event', event);
+    if(event.Records[0]['eventSource'] == "aws:sqs") {
+        const message_body = JSON.parse(event.Records[0]['body']);
+        console.log('tiling', message_body)
+        try {
+            await tileImage(message_body);
+            console.log('sending callback to Sake');
+            return sendCallbackResponse(
+                message_body['callback_url'],
+                message_body['callback_token'],
+                message_body['image_number'],
+                'ready', context);
+        } catch(err) {
+            console.log('caught tiling exception', err);
+            return sendCallbackResponse(
+                    message_body['callback_url'],
+                    message_body['callback_token'],
+                    message_body['image_number'],
+                    'error', context);
         }
-    }
 
-    if (event.RequestType === 'Create') {
-        console.log('Request type is create');
-    }
-
-    if (event.RequestType === 'Update') {
-        console.log('Request type is update');
-        sendResponse(event, callback, context.logStreamName, 'SUCCESS');
     }
 };
 
 /**
  * Gets the original image from an Amazon S3 bucket.
- * @param {String} bucket - The name of the bucket containing the image.
  * @param {String} key - The key name corresponding to the image.
  * @return {Promise} - The original image or an error.
  */
-let tileImage = async function(bucket, key) {
-    const imagesLocation = key.split('/tiles')[0]
+let tileImage = async function(message_body) {
+    const imagesLocation = message_body['aws_key']
+    console.log('imagesLocation', imagesLocation)
     const uniq_key = imagesLocation.split('/').pop()
     const tmp_location = '/tmp/' + uniq_key
+    console.log('tmp_location', tmp_location)
 
-    try {
-        const originalImage = await getOriginalImage(bucket, imagesLocation);
-        const image = sharp(originalImage);
-        const tiles = image.png().tile({
-            layout: 'zoomify'
-          }).toFile(tmp_location + 'tiled.dz', function(err, info) {
-            if (err) {
-                console.log('err', err);
-            } else {
-                console.log('successfully tiled images ' + tmp_location);
-                Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(errs, data) {
-                        if (errs.length) console.log('errors ', errs);// an error occurred
-                        console.log('successfully uploaded tiled images');
-                    }).catch(function(exception) {
-                        console.log('caught exception', exception);
-                    }).finally(function() {
-                        deleteFolderRecursive(tmp_location + 'tiled/');
-                        console.log('successfully deleted tmp files');
-                    });;
-            }
-        });
-    } catch(err) {
-        return Promise.reject({
-            status: 500,
-            code: err.code,
-            message: err.message
-        })
-    }
+    const originalImage = await getOriginalImage(imagesLocation);
+    const image = sharp(originalImage);
+    console.log('split image into local tiles with sharp')
+
+    const tiles = await image.png()
+                            .tile({ layout: 'zoomify'})
+                            .toFile(tmp_location + 'tiled.dz')
+
+    return Promise.all(
+        upload_recursive_dir(
+            tmp_location + 'tiled/',
+            imagesLocation + '/tiles/',
+            []
+        )
+    ).then(function(errs, data) {
+        if (errs.length) console.log('errors ', errs);// an error occurred
+        console.log('successfully uploaded tiled images');
+    }).catch(function(exception) {
+        console.log('throwing exception to be caught above', exception);
+        throw exception;
+    }).finally(function() {
+        deleteFolderRecursive(tmp_location + 'tiled/');
+        console.log('successfully deleted tmp files');
+    });
 }
 
 
 /**
  * Gets the original image from an Amazon S3 bucket.
- * @param {String} bucket - The name of the bucket containing the image.
  * @param {String} key - The key name corresponding to the image.
  * @return {Promise} - The original image or an error.
  */
-let getOriginalImage = async function(bucket, imagesLocation) {
-    let images = await getImageObjects(bucket, imagesLocation);
+let getOriginalImage = async function(imagesLocation) {
+    let images = await getImageObjects(imagesLocation);
     let originalObject = images.find(isOriginal);
-    console.log('originalObject filename', originalObject.Key);
-    return downloadImage(bucket, originalObject.Key);
+    console.log('found original', originalObject.Key);
+    return downloadImage(originalObject.Key);
 }
 
 function isOriginal(fileObject) {
     return fileObject.Key.includes("/original-");
 }
 
-let getImageObjects = async function(bucket, location) {
+let getImageObjects = async function(location) {
     const request = s3.listObjects({
-        Bucket: bucket,
+        Bucket: process.env.S3_BUCKET,
         Marker: location,
         MaxKeys: 10
     }).promise();
@@ -118,6 +118,7 @@ let getImageObjects = async function(bucket, location) {
         return Promise.resolve(imageObjects.Contents);
     }
     catch(err) {
+        console.log('failed to getImageObjects', err)
         return Promise.reject({
             status: 500,
             code: err.code,
@@ -126,14 +127,15 @@ let getImageObjects = async function(bucket, location) {
     }
 }
 
-let downloadImage = async function(bucket, key){
-    let imageLocation = { Bucket: bucket, Key: key };
+let downloadImage = async function(key){
+    let imageLocation = { Bucket: process.env.S3_BUCKET, Key: key };
     const request = s3.getObject(imageLocation).promise();
     try {
         const originalImage = await request;
         return Promise.resolve(originalImage.Body);
     }
     catch(err) {
+        console.log('failed to downloadImage', err)
         return Promise.reject({
             status: 500,
             code: err.code,
@@ -143,22 +145,34 @@ let downloadImage = async function(bucket, key){
 }
 
 
-let upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promises) {
-    let files = fs.readdirSync(base_tmpdir);
+let upload_recursive_dir = function(base_tmpdir, s3_key, promises) {
 
+    let files = fs.readdirSync(base_tmpdir);
+    // console.log('uploading files', files)
     files.forEach(function (filename) {
         let local_temp_path = base_tmpdir + filename;
         let destS3key = s3_key + filename;
         if (fs.lstatSync(local_temp_path).isDirectory()) {
-            promises = upload_recursive_dir(local_temp_path + '/', destS3Bucket, destS3key + '/', promises);
+            // console.log('adding dir', local_temp_path);
+            // console.log('adding dir to', destS3key);
+            promises = upload_recursive_dir(
+                local_temp_path + '/',
+                destS3key + '/',
+                promises);
         } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
             fs.readFile(local_temp_path, function (err, file) {
-              if (err) console.log('readFile err', err); // an error occurred // an error occurred
+              if (err) {
+                console.log('readFile err', err); // an error occurred // an error occurred
+                console.log('files err', files); // an error occurred // an error occurred
+                throw err;
+              }
+
               let params = {
-                Bucket: destS3Bucket,
+                Bucket: process.env.S3_BUCKET,
                 Key: destS3key,
                 Body: file
               }
+              // console.log('bucket ' + process.env.S3_BUCKET + ' key: ', destS3key)
               promises.push(s3.putObject(params).promise());
             });
         }
@@ -182,47 +196,28 @@ let deleteFolderRecursive = function (directory_path) {
 };
 
 /**
- * Sends a response to the pre-signed S3 URL
+ * Sends a response to the API webhook
  */
-let sendResponse = function(event, callback, logStreamName, responseStatus, responseData, customReason) {
-
-    const defaultReason = `See the details in CloudWatch Log Stream: ${logStreamName}`;
-    const reason = (customReason !== undefined) ? customReason : defaultReason;
-
-    const responseBody = JSON.stringify({
-        Status: responseStatus,
-        Reason: reason,
-        PhysicalResourceId: logStreamName,
-        StackId: event.StackId,
-        RequestId: event.RequestId,
-        LogicalResourceId: event.LogicalResourceId,
-        Data: responseData,
-    });
-
-    console.log('RESPONSE BODY:\n', responseBody);
-    const parsedUrl = url.parse(event.ResponseURL);
-    const options = {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: parsedUrl.path,
+let sendCallbackResponse = function(callback_url, auth_token, image_number, result, context) {
+    console.log('sending callback to ', callback_url)
+    return axios({
+        url: callback_url,
+        timeout: 2000,
         method: 'PUT',
         headers: {
-            'Content-Type': '',
-            'Content-Length': responseBody.length,
+            'Content-Type': 'application/json',
+            'X-Api-Token': auth_token
+        },
+        data:  {
+            number: image_number,
+            image_status: result
         }
-    };
-
-    const req = https.request(options, (res) => {
-        console.log('STATUS:', res.statusCode);
-        console.log('HEADERS:', JSON.stringify(res.headers));
-        callback(null, 'Successfully sent stack response!');
-    });
-
-    req.on('error', (err) => {
-        console.log('sendResponse Error:\n', err);
-        callback(err);
-    });
-
-    req.write(responseBody);
-    req.end();
+    }).then(function (response) {
+        console.log('callback result sent: ', result)
+        if (result == 'ready'){
+            return context.succeed("Success");
+        } else {
+            return context.done(null, 'FAILURE');
+        }
+      });
 };
