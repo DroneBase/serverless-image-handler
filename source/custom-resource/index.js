@@ -50,7 +50,7 @@ let tileImage = async function(bucket, key) {
     const tmp_location = '/tmp/' + uniq_key
 
     try {
-        const originalImage = await getOriginalImage(bucket, imagesLocation);
+        const originalImage = await getOriginalImage(bucket, imagesLocation + '/');
         const image = sharp(originalImage);
         const tiles = image.png().tile({
             layout: 'zoomify'
@@ -85,10 +85,10 @@ let tileImage = async function(bucket, key) {
  * @return {Promise} - The original image or an error.
  */
 let getOriginalImage = async function(bucket, imagesLocation) {
-    let images = await getImageObjects(bucket, imagesLocation);
-    let originalObject = images.find(isOriginal);
+    const images = await getImageObjects(bucket, imagesLocation);
+    const originalObject = images.find(isOriginal);
     console.log('originalObject filename', originalObject.Key);
-    if(fileObject.Key.includes("backfill-original")) {
+    if(originalObject.Key.includes("backfill-original")) {
         throw new Error('Should not be tiling back fill image');
     } else {
         return downloadImage(bucket, originalObject.Key);
