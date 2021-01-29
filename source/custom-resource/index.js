@@ -25,7 +25,8 @@ const sharp = require('sharp');
  * Request handler.
  */
 exports.handler = (event, context, callback) => {
-    console.log('Received key:', event.Records[0].s3.object.key);
+    key = event.Records[0].s3.object.key
+    console.log('Received key:', key);
 
     if(event.ResponseURL) {
         console.log('Event:', event);
@@ -33,7 +34,7 @@ exports.handler = (event, context, callback) => {
 
     if(event.Records[0]['eventName'] == "ObjectCreated:Put" &&
         event.Records[0].s3.object.key.endsWith('/tiles/')){
-        tileImage(event.Records[0].s3.bucket.name, event.Records[0].s3.object.key);
+        tileImage(event.Records[0].s3.bucket.name, key);
     }
 };
 
@@ -87,11 +88,15 @@ let getOriginalImage = async function(bucket, imagesLocation) {
     let images = await getImageObjects(bucket, imagesLocation);
     let originalObject = images.find(isOriginal);
     console.log('originalObject filename', originalObject.Key);
-    return downloadImage(bucket, originalObject.Key);
+    if(fileObject.Key.includes("backfill-original")) {
+        throw new Error('Should not be tiling back fill image');
+    } else {
+        return downloadImage(bucket, originalObject.Key);
+    }
 }
 
 function isOriginal(fileObject) {
-    return fileObject.Key.includes("/original-");
+    return fileObject.Key.includes("original-");
 }
 
 let getImageObjects = async function(bucket, location) {
