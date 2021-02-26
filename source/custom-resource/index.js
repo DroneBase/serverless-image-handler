@@ -25,7 +25,7 @@ const sharp = require('sharp');
  * Request handler.
  */
 exports.handler = (event, context, callback) => {
-    key = event.Records[0].s3.object.key
+    const key = event.Records[0].s3.object.key
     console.log('Received key:', key);
 
     if(event.ResponseURL) {
@@ -73,7 +73,11 @@ let tileImage = async function(bucket, key) {
         });
     } catch(err) {
         console.error('failed to tileImage', err);
-        throw err;
+        if(err.message == "Should not be tiling back fill image") {
+            return true
+        } else {
+            throw err;
+        }
     }
 }
 
@@ -85,6 +89,7 @@ let tileImage = async function(bucket, key) {
  * @return {Promise} - The original image or an error.
  */
 let getOriginalImage = async function(bucket, imagesLocation) {
+    console.log('looking for objects in:', imagesLocation);
     const images = await getImageObjects(bucket, imagesLocation);
     const originalObject = images.find(isOriginal);
     console.log('originalObject filename', originalObject.Key);
@@ -96,6 +101,7 @@ let getOriginalImage = async function(bucket, imagesLocation) {
 }
 
 function isOriginal(fileObject) {
+    console.log("Image key: ", fileObject.Key)
     return fileObject.Key.includes("original-");
 }
 
@@ -103,7 +109,8 @@ let getImageObjects = async function(bucket, location) {
     const request = s3.listObjects({
         Bucket: bucket,
         Marker: location,
-        MaxKeys: 10
+        Prefix: location,
+        MaxKeys: 5
     }).promise();
     try {
         const imageObjects = await request;
