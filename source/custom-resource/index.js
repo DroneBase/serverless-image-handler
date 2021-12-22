@@ -44,8 +44,7 @@ const tileImage = async function(bucket, key) {
         console.log('err', err);
       } else {
         console.log('successfully tiled images ' + tmp_location);
-        const tiledFolder = tmp_location + 'tiled/';
-        return upload_tiles(tiledFolder, bucket, key);
+        return upload_tiles(tmp_location + 'tiled/', bucket, key);
       }
     });
   } catch(err) {
@@ -109,37 +108,23 @@ const downloadImage = async function(bucket, key){
   }
 }
 
-const upload_tiles = function(base_tmpdir, destS3Bucket, s3_key) {
-  return fs.promises.readdir(base_tmpdir).then(function(files) {
-    files.forEach(filename => {
-      const locationPath = base_tmpdir + filename;
-      const destS3key = s3_key + filename;
-
-      if (fs.lstatSync(locationPath).isDirectory()) {
-        Promise.all(
-          upload_recursive_dir(locationPath + '/', destS3Bucket, destS3key + '/', [])
-          ).then(function(data) {
-            console.log('successfully uploaded tiled images: ' + data.length);
-          }).catch(function(exception) {
-            console.log('caught exception:', exception);
-            throw exception;
-          });
-        } else if(filename.endsWith('.xml')) {
-          uploadToS3(destS3Bucket, destS3key, locationPath);
-        }
-      });
+const upload_tiles = function(tiledFolder, bucket, s3_key) {
+  return Promise.all(
+    upload_recursive_dir(tiledFolder, bucket, s3_key, [])
+  ).then(function(data) {
+      console.log('successfully uploaded tiled images: ' + data.length);
   }).catch(function(exception) {
-    console.log('caught exception:', exception);
-    throw exception;
+      console.log('caught exception:', exception);
+      throw exception;
   }).finally(function() {
-    if (fs.existsSync(base_tmpdir)) {
-      try {
-        fs.rmdirSync(base_tmpdir, { recursive: true });
-        console.log("Deleted " + base_tmpdir);
-      } catch(err) {
-        console.log("Meh! Failed to Deleted the deleted: ", err);
+      if (fs.existsSync(tiledFolder)) {
+        try {
+          fs.rmdirSync(tiledFolder, { recursive: true });
+          console.log("Deleted " + tiledFolder);
+        } catch(err) {
+          console.log("Meh! Failed to Deleted the deleted: ", err);
+        }
       }
-    }
   });
 }
 
@@ -151,7 +136,7 @@ const upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promise
     const destS3key = s3_key + filename;
     if (fs.lstatSync(locationPath).isDirectory()) {
       promises = upload_recursive_dir(locationPath + '/', destS3Bucket, destS3key + '/', promises);
-    } else if(filename.endsWith('.png')) {
+    } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
       promises.push(uploadToS3(destS3Bucket, destS3key, locationPath));
     }
   });
