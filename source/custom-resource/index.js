@@ -130,6 +130,7 @@ const upload_tiles = function(tiledFolder, bucket, s3_key) {
 
 const upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promises) {
   const files = fs.readdirSync(base_tmpdir);
+  const asyncReadFile = promises.length < 750;
 
   files.forEach(function (filename) {
     const locationPath = base_tmpdir + filename;
@@ -137,13 +138,23 @@ const upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promise
     if (fs.lstatSync(locationPath).isDirectory()) {
       promises = upload_recursive_dir(locationPath + '/', destS3Bucket, destS3key + '/', promises);
     } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
-      promises.push(uploadToS3(destS3Bucket, destS3key, locationPath));
+      promises.push(uploadToS3(destS3Bucket, destS3key, locationPath, asyncReadFile));
     }
   });
   return promises;
 }
 
-const uploadToS3 = function (bucketName, destS3key, filePath) {
-  return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: fs.readFileSync(filePath) }).promise();
+const uploadToS3 = function (bucketName, destS3key, filePath, asyncReadFile) {
+  if(asyncReadFile) {
+    fs.readFile(filePath, function (err, file) {
+      if (err) {
+        console.log('readFile err', err); // an error occurred // an error occurred
+        throw err
+      }
+      return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: file }).promise();
+    });
+  } else {
+    return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: fs.readFileSync(filePath) }).promise();
+  }
 }
 
