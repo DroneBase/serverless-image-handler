@@ -70,10 +70,30 @@ class ImageHandler {
                 }
             } else if(key === 'linear') {
                 image.linear(value.a, value.b)
+            } else if (key === "shadows" || key === "highlights") {
+                // ignored here, they have their special cases after
             } else {
                 image[key](value);
             }
         }
+
+        if ("highlights" in edits || "shadows" in edits) {
+          const highlightsImage = sharp(originalImage).threshold(255 - edits.highlights);
+          if ("negate" in edits) {
+            highlightsImage.negate();
+          }
+
+          const shadowsImage = sharp(originalImage).threshold(edits.shadows);
+          if ("negate" in edits) {
+            shadowsImage.negate();
+          }
+
+          const highlightsInput = "highlights" in edits ? [{ input: await highlightsImage.toBuffer(), blend: "lighten" }] : [];
+          const shadowsInput = "shadows" in edits ? [{ input: await shadowsImage.toBuffer(), blend: "darken" }] : [];
+
+          image.composite([...highlightsInput, ...shadowsInput]);
+        }
+
         // Return the modified image
         return image;
     }
