@@ -14,9 +14,6 @@ var util = require('util');
  * Request handler.
  */
 exports.handler = (event, context, callback) => {
-  if (global.gc) {
-    global.gc(); // try and deal with memory leak
-  }
 
   const key = event.Records[0].s3.object.key
   console.log('Received key:', key);
@@ -41,29 +38,13 @@ const tileImage = async function(bucket, key) {
   try {
     const originalImage = await getOriginalImage(bucket, imagesLocation + '/');
     sharp(originalImage).png().tile({
-        layout: 'zoomify'
-      }).toFile(tmp_location + 'tiled.dz', function(err, info) {
-        if (err) {
-          console.log('err', err);
-        } else {
-          console.log('successfully tiled images ' + tmp_location);
-          const tiledFolder = tmp_location + 'tiled/';
-          return Promise.all(upload_recursive_dir(tiledFolder, bucket, key, [])
-            ).then(function(data) {
-                console.log('successfully uploaded tiled images: ' + data.length);
-            }).catch(function(exception) {
-                console.log('caught exception:', exception);
-                throw exception;
-            }).finally(function() {
-                if (fs.existsSync(tiledFolder)) {
-                  try {
-                    fs.rmdirSync(tiledFolder, { recursive: true });
-                    console.log("Deleted " + tiledFolder);
-                  } catch(err) {
-                    console.log("Meh! Failed to Deleted the deleted: ", err);
-                  }
-                }
-            });
+      layout: 'zoomify'
+    }).toFile(tmp_location + 'tiled.dz', function(err, info) {
+      if (err) {
+        console.log('err', err);
+      } else {
+        console.log('successfully tiled images ' + tmp_location);
+        return upload_tiles(tmp_location + 'tiled/', bucket, key);
       }
     });
   } catch(err) {
@@ -75,7 +56,6 @@ const tileImage = async function(bucket, key) {
     }
   }
 }
-
 
 /**
  * Gets the original image from an Amazon S3 bucket.
@@ -89,9 +69,9 @@ const getOriginalImage = async function(bucket, imagesLocation) {
   const originalObject = images.find(isOriginal);
   console.log('originalObject filename', originalObject.Key);
   if(originalObject.Key.includes("backfill-original")) {
-      throw new Error('Should not be tiling back fill image');
+    throw new Error('Should not be tiling back fill image');
   } else {
-      return downloadImage(bucket, originalObject.Key);
+    return downloadImage(bucket, originalObject.Key);
   }
 }
 
@@ -128,8 +108,29 @@ const downloadImage = async function(bucket, key){
   }
 }
 
+const upload_tiles = function(tiledFolder, bucket, s3_key) {
+  return Promise.all(
+    upload_recursive_dir(tiledFolder, bucket, s3_key, [])
+  ).then(function(data) {
+      console.log('successfully uploaded tiled images: ' + data.length);
+  }).catch(function(exception) {
+      console.log('caught exception:', exception);
+      throw exception;
+  }).finally(function() {
+      if (fs.existsSync(tiledFolder)) {
+        try {
+          fs.rmdirSync(tiledFolder, { recursive: true });
+          console.log("Deleted " + tiledFolder);
+        } catch(err) {
+          console.log("Meh! Failed to Deleted the deleted: ", err);
+        }
+      }
+  });
+}
+
 const upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promises) {
   const files = fs.readdirSync(base_tmpdir);
+  const asyncReadFile = promises.length < 750;
 
   files.forEach(function (filename) {
     const locationPath = base_tmpdir + filename;
@@ -137,19 +138,23 @@ const upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promise
     if (fs.lstatSync(locationPath).isDirectory()) {
       promises = upload_recursive_dir(locationPath + '/', destS3Bucket, destS3key + '/', promises);
     } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
-      promises.push(uploadToS3(destS3Bucket, destS3key, locationPath));
+      promises.push(uploadToS3(destS3Bucket, destS3key, locationPath, asyncReadFile));
     }
   });
   return promises;
 }
 
-const uploadToS3 = function (bucketName, destS3key, filePath) {
-  fs.readFile(filePath, function (err, file) {
-    if (err) {
-      console.log('readFile err', err); // an error occurred // an error occurred
-      throw err
-    }
-    return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: file }).promise();
-  });
+const uploadToS3 = function (bucketName, destS3key, filePath, asyncReadFile) {
+  if(asyncReadFile) {
+    fs.readFile(filePath, function (err, file) {
+      if (err) {
+        console.log('readFile err', err); // an error occurred // an error occurred
+        throw err
+      }
+      return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: file }).promise();
+    });
+  } else {
+    return s3.putObject({ Bucket: bucketName, Key: destS3key, Body: fs.readFileSync(filePath) }).promise();
+  }
 }
 
