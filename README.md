@@ -1,4 +1,4 @@
-DRONEBASE Notes
+# DRONEBASE Notes
 
 There are actually two lambda functions in this code base.. The first is AWS serverless-image handler with a teeny modification for our CF distrubtion.
 
@@ -11,9 +11,11 @@ export DIST_OUTPUT_BUCKET=db-serverless-image-handler
 export SOLUTION_NAME=image-resize-service-eu
 ```
 
- ./build-s3-dist.sh $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
+```sh
+./build-s3-dist.sh $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
 aws s3 sync ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --acl bucket-owner-full-control
 aws s3 sync ./global-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --acl bucket-owner-full-control
+```
 
 
 There is also the tiling service that we built to use the VIPS lib and tile our images for Insights
@@ -26,11 +28,29 @@ https://sharp.pixelplumbing.com/install#aws-lambda
 
 zipping up and deploying by uploading zip straight to the lambda function
 
+## Building on mac M1
+
+To install sharp, the easier way I found is to run the install on a linux container using docker
+The following command starts a docker container with your current folder mounted in `/dronebase`
+
+```sh
+docker run --platform=linux/amd64 --entrypoint /bin/sh -it --rm -v=$(pwd):/dronebase --name node node:16
+```
+
+Now, you should be able to run `SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --production  --arch=x64 --platform=linux --target=12.18.1 sharp` without any issues.
+
+You'll likely need to install `zip` too. To do so, you can run:
+
+```sh
+apt update
+apt install zip
+```
+
+# AWS Serverless Image Handler Lambda wrapper for SharpJS
 
 **_Important Notice:_**
 Due to a [change in the AWS Lambda execution environment](https://aws.amazon.com/blogs/compute/upcoming-updates-to-the-aws-lambda-execution-environment/), Serverless Image Handler v3 deployments are functionally broken. To address the issue we have released [minor version update v3.1.1](https://solutions-reference.s3.amazonaws.com/serverless-image-handler/v3.1.1/serverless-image-handler.template). We recommend all users of v3 to run cloudformation stack update with v3.1.1. Additionally, we suggest you to look at v5 of the solution and migrate to v5 if it addresses all of your use cases.
 
-# AWS Serverless Image Handler Lambda wrapper for SharpJS
 A solution to dynamically handle images on the fly, utilizing Sharp (https://sharp.pixelplumbing.com/en/stable/).
 Published version, additional details and documentation are available here: https://aws.amazon.com/solutions/serverless-image-handler/
 
