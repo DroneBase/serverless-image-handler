@@ -1,23 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Specification template describing your function.
 Resources:
-  ApiGatewayFunction:
-    Type: AWS::Serverless::Function
+  imagehandlerdev:
+    Type: 'AWS::Serverless::Function'
     Properties:
-      CodeUri: '.'
       Handler: index.handler
       Runtime: nodejs12.x
+      CodeUri: .
+      Description: ''
+      MemorySize: 512
       Timeout: 60
-      MemorySize: 256
-      Environment:
-        Variables:
-          VERSION: "v1.0.10"
-          REGION: "eu-central-1"
-          DIST_OUTPUT_BUCKET: "db-serverless-image-handler"
-          SOLUTION_NAME: "image-resize-service-eu"
-          SOURCE_BUCKETS: "dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development"
-          TRUNCATE_PATH_PREFIX: "resized_images/"
+      Role: >-
+        arn:aws:iam::757639335249:role/service-role/image-handler-dev-role-n3isq2go
       Events:
-        HelloWorld:
+        Api1:
           Type: Api
           Properties:
-            Path: /{proxy+}
-            Method: GET
+            Path: '/{proxy+}'
+            Method: ANY
+      Environment:
+        Variables:
+          CACHE_CONTROL: max-age=7884000
+          CORS_ENABLED: 'Yes'
+          CORS_ORIGIN: '*'
+          SOURCE_BUCKETS: >-
+            dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development
+          TRUNCATE_PATH_PREFIX: resized_images/
