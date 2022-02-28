@@ -91,18 +91,89 @@ class ImageHandler {
         }
 
         if ("highlights" in edits || "shadows" in edits) {
-            const highlightsImage = sharp(await image.toBuffer()).threshold(255 - edits.highlights);
-            const shadowsImage = sharp(await image.toBuffer()).threshold(edits.shadows);
-
-            const highlightsInput =
-            "highlights" in edits ? [{ input: await highlightsImage.toBuffer(), blend: "lighten" }] : [];
-            const shadowsInput = "shadows" in edits ? [{ input: await shadowsImage.toBuffer(), blend: "darken" }] : [];
-
-            image.composite([...highlightsInput, ...shadowsInput]);
+            image = await this.addHighlightsAndShadows(image, {
+                highlights: edits.highlights,
+                shadows: edits.shadows,
+            });
         }
 
         // Return the modified image
         return image;
+    }
+
+    async addHighlightsAndShadows(image, { highlights = 0, shadows = 0 }) {
+        console.log(highlights, shadows);
+
+        // When Highlights is 100%, increase the TonalWidth by 0.1
+        const additionalHighlightsTonal = Math.abs(highlights) / 1000
+        const additionalShadowsTonal = Math.abs(shadows) / 1000
+
+        const highlightsAmount = Math.abs(highlights / 200)
+        const highlightsTonalWidth = highlights > 0 ? 0.2 + additionalHighlightsTonal : -(0.2 + additionalHighlightsTonal)
+        const highlightsRadius = 5
+
+        const shadowsAmount = Math.abs(shadows / 200)
+        const shadowsTonalWidth = shadows > 0 ? 0.2 + additionalShadowsTonal : -(0.2 + additionalShadowsTonal)
+        const shadowsRadius = 5
+
+        const { width, height } = await image.metadata()
+
+        const shadowsThreshold = sharp(await image.toBuffer())
+            .threshold(Math.ceil(shadowsAmount * 255), { grayscale: true })
+            .blur(shadowsRadius)
+
+        let shadowMap = shadowsThreshold.extractChannel("red").toColorspace("b-w").linear(-1, 255)
+        shadowMap = sharp(await shadowMap.toBuffer())
+            .toColorspace("b-w")
+            .linear(Math.abs(shadowsTonalWidth))
+
+        const shadowMapChannel = await shadowMap.raw().toBuffer({ resolveWithObject: true })
+        const shadowsLayer = sharp({
+            create: {
+                width,
+                height,
+                channels: 3,
+                background: {
+                    r: shadowsTonalWidth < 0 ? 0 : 255,
+                    g: shadowsTonalWidth < 0 ? 0 : 255,
+                    b: shadowsTonalWidth < 0 ? 0 : 255,
+                },
+            },
+        })
+            .joinChannel(shadowMapChannel.data, { raw: { width, height, channels: 1 } })
+            .png()
+
+        const highlightsThreshold = sharp(await image.toBuffer())
+            .threshold(Math.ceil((1 - highlightsAmount) * 255), { grayscale: true })
+            .blur(highlightsRadius)
+
+        let highlightsMap = highlightsThreshold
+            .clone()
+            .extractChannel("red")
+            .toColorspace("b-w")
+            .linear(Math.abs(highlightsTonalWidth))
+        const highlightsMapChannel = await highlightsMap.raw().toBuffer({ resolveWithObject: true })
+        const highlightsLayer = sharp({
+            create: {
+                width,
+                height,
+                channels: 3,
+                background: {
+                    r: highlightsTonalWidth < 0 ? 0 : 255,
+                    g: highlightsTonalWidth < 0 ? 0 : 255,
+                    b: highlightsTonalWidth < 0 ? 0 : 255,
+                },
+            },
+        })
+            .joinChannel(highlightsMapChannel.data, { raw: { width, height, channels: 1 } })
+            .png()
+
+        const result = sharp(await image.toBuffer()).composite([
+            { input: await shadowsLayer.toBuffer(), blend: shadowsTonalWidth < 0 ? "color-burn" : "color-dodge" },
+            { input: await highlightsLayer.toBuffer(), blend: highlightsTonalWidth < 0 ? "colour-burn" : "colour-dodge" },
+        ])
+
+        return sharp(await result.toBuffer())
     }
 
     /**
