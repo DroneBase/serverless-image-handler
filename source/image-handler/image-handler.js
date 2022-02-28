@@ -42,7 +42,7 @@ class ImageHandler {
      * @param {Object} edits - The edits to be made to the original image.
      */
     async applyEdits(originalImage, edits) {
-        const image = sharp(originalImage);
+        let image = sharp(originalImage);
         const keys = Object.keys(edits);
         const values = Object.values(edits);
         // Apply the image edits
@@ -69,29 +69,36 @@ class ImageHandler {
                     });
                 }
             } else if(key === 'linear') {
-                image.linear(value.a, value.b)
-            } else if (key === "shadows" || key === "highlights") {
+                image.linear(value.a, value.b);
+            } else if (key === 'shadows' || key === 'highlights' || key === 'negate') {
                 // ignored here, they have their special cases after
             } else {
                 image[key](value);
             }
         }
 
+        if ("negate" in edits) {
+            /**
+             * Some changes aren't perform in the order we specify them.
+             * For example, if you do `image.modulate({ brightness: 0.5 }).negate()`
+             * or `image.negate().module({ brightness: 0.5 })` the result will be the same.
+             * It will first negate the image and then apply the brightness changes.
+             * 
+             * This hack apply all changes to the image so you can control the order
+             */
+            image = sharp(await image.toBuffer());
+            image.negate();
+        }
+
         if ("highlights" in edits || "shadows" in edits) {
-          const highlightsImage = sharp(originalImage).threshold(255 - edits.highlights);
-          if ("negate" in edits) {
-            highlightsImage.negate();
-          }
+            const highlightsImage = sharp(await image.toBuffer()).threshold(255 - edits.highlights);
+            const shadowsImage = sharp(await image.toBuffer()).threshold(edits.shadows);
 
-          const shadowsImage = sharp(originalImage).threshold(edits.shadows);
-          if ("negate" in edits) {
-            shadowsImage.negate();
-          }
+            const highlightsInput =
+            "highlights" in edits ? [{ input: await highlightsImage.toBuffer(), blend: "lighten" }] : [];
+            const shadowsInput = "shadows" in edits ? [{ input: await shadowsImage.toBuffer(), blend: "darken" }] : [];
 
-          const highlightsInput = "highlights" in edits ? [{ input: await highlightsImage.toBuffer(), blend: "lighten" }] : [];
-          const shadowsInput = "shadows" in edits ? [{ input: await shadowsImage.toBuffer(), blend: "darken" }] : [];
-
-          image.composite([...highlightsInput, ...shadowsInput]);
+            image.composite([...highlightsInput, ...shadowsInput]);
         }
 
         // Return the modified image
