@@ -110,7 +110,7 @@ class ImageHandler {
         const shadowsTonalWidth = shadows > 0 ? 0.2 : -0.2
         const shadowsRadius = 50
 
-        const { width, height } = await image.metadata()
+        const { width, height } = await (sharp(await image.toBuffer())).metadata();
 
         // create a black and white image with the desired amount and blur it
         const highlightsThreshold = sharp(await image.toBuffer())
