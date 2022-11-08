@@ -42,7 +42,7 @@ class ImageHandler {
      * @param {Object} edits - The edits to be made to the original image.
      */
     async applyEdits(originalImage, edits) {
-        const image = sharp(originalImage);
+        let image = sharp(originalImage);
         const keys = Object.keys(edits);
         const values = Object.values(edits);
         // Apply the image edits
@@ -69,13 +69,120 @@ class ImageHandler {
                     });
                 }
             } else if(key === 'linear') {
-                image.linear(value.a, value.b)
+                image.linear(value.a, value.b);
+            } else if (key === 'shadows' || key === 'highlights' || key === 'negate') {
+                // ignored here, they have their special cases after
             } else {
                 image[key](value);
             }
         }
+
+        if ("negate" in edits) {
+            /**
+             * Some changes aren't perform in the order we specify them.
+             * For example, if you do `image.modulate({ brightness: 0.5 }).negate()`
+             * or `image.negate().module({ brightness: 0.5 })` the result will be the same.
+             * It will first negate the image and then apply the brightness changes.
+             * 
+             * This hack apply all changes to the image so you can control the order
+             */
+            image = sharp(await image.toBuffer())
+            image.negate()
+        }
+
+        if ("highlights" in edits || "shadows" in edits) {
+            image = await this.addHighlightsAndShadows(image, {
+                highlights: edits.highlights,
+                shadows: edits.shadows,
+            })
+        }
+
         // Return the modified image
-        return image;
+        return image
+    }
+
+    async addHighlightsAndShadows(image, { highlights = 0, shadows = 0 }) {
+        const highlightsAmount = Math.abs(highlights / 200)
+        const highlightsTonalWidth = highlights > 0 ? 0.2 : -0.2
+        const highlightsRadius = 50
+
+        const shadowsAmount = Math.abs(shadows / 200)
+        const shadowsTonalWidth = shadows > 0 ? 0.2 : -0.2
+        const shadowsRadius = 50
+
+        const { width, height } = await (sharp(await image.toBuffer())).metadata()
+
+        // create a black and white image with the desired amount and blur it
+        const highlightsThreshold = sharp(await image.toBuffer())
+            .threshold(Math.ceil((1 - highlightsAmount) * 255), { grayscale: true })
+            .blur(highlightsRadius)
+
+        // extract one of the channels to reuse as alpha
+        // use of linear to scale the intensity of the highlights
+        // depending on the tonal width.
+        let highlightsMapChannel = await highlightsThreshold
+            .extractChannel("red")
+            .toColorspace("b-w")
+            .linear(Math.abs(highlightsTonalWidth))
+            .raw()
+            .toBuffer({ resolveWithObject: true })
+        
+        // create a black or white image depending on the tonal width
+        // and apply the alpha channel from the threshold image
+        const highlightsLayer = sharp({
+            create: {
+                width,
+                height,
+                channels: 3,
+                background: {
+                  r: highlightsTonalWidth < 0 ? 0 : 255,
+                  g: highlightsTonalWidth < 0 ? 0 : 255,
+                  b: highlightsTonalWidth < 0 ? 0 : 255,
+                },
+            },
+        })
+            .joinChannel(highlightsMapChannel.data, { raw: { width, height, channels: 1 } })
+            .png()
+
+        // blend the highlights layer with the original image
+        const withHighlights = sharp(await image.toBuffer()).composite([
+            { input: await highlightsLayer.toBuffer(), blend: "overlay", premultiplied: true },
+        ])
+
+        // We do the same thing for the shadows
+        // We use the image with the highlights layer as the base
+        // To match what's done on the frontend
+        const shadowsThreshold = sharp(await withHighlights.toBuffer())
+            .threshold(Math.ceil(shadowsAmount * 255), { grayscale: true })
+            .blur(shadowsRadius)
+
+        let shadowMap = shadowsThreshold.extractChannel("red").toColorspace("b-w").linear(-1, 255)
+        const shadowMapChannel = await sharp(await shadowMap.toBuffer())
+            .toColorspace("b-w")
+            .linear(Math.abs(shadowsTonalWidth))
+            .raw()
+            .toBuffer({ resolveWithObject: true })
+
+        const shadowsLayer = sharp({
+            create: {
+                width,
+                height,
+                channels: 3,
+                background: {
+                    r: shadowsTonalWidth < 0 ? 0 : 255,
+                    g: shadowsTonalWidth < 0 ? 0 : 255,
+                    b: shadowsTonalWidth < 0 ? 0 : 255,
+                },
+            },
+        })
+            .joinChannel(shadowMapChannel.data, { raw: { width, height, channels: 1 } })
+            .png()
+
+        const result = sharp(await withHighlights.toBuffer()).composite([
+            { input: await shadowsLayer.toBuffer(), blend: "overlay", premultiplied: true },
+        ])
+
+        return sharp(await result.toBuffer())
     }
 
     /**
