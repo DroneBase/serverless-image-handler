@@ -11,6 +11,7 @@
  *  and limitations under the License.                                                                                *
  *********************************************************************************************************************/
 
+const {S3Client} = require('@aws-sdk/client-s3')
 const ThumborMapping = require('./thumbor-mapping');
 
 class ImageRequest {
@@ -40,8 +41,7 @@ class ImageRequest {
      * @return {Promise} - The original image or an error.
      */
     async getOriginalImage(bucket, key) {
-        const S3 = require('aws-sdk/clients/s3');
-        const s3 = new S3();
+        const s3 = new S3Client();
         const imageLocation = { Bucket: bucket, Key: key };
         const request = s3.getObject(imageLocation).promise();
         try {
@@ -157,7 +157,7 @@ class ImageRequest {
      * @param {Object} event - Lambda request body.
     */
     parseRequestType(event) {
-        let path = event["path"];
+        let path = event["rawPath"];
 
         if (process.env.TRUNCATE_PATH_PREFIX !== undefined) {
             // Allows cloudfront to be shared by adding a prefix/* to behaviour
@@ -173,6 +173,9 @@ class ImageRequest {
             (process.env.REWRITE_MATCH_PATTERN !== undefined) &&
             (process.env.REWRITE_SUBSTITUTION !== undefined)
         );
+
+        console.log('PATH, ', path)
+
         // ----
         if (matchDefault.test(path)) {  // use sharp
             return 'Default';

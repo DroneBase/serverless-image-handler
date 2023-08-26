@@ -27,3 +27,4 @@ demo-ui-config.js
 **/.vscode
 source/image-handler/Archive.zip
 source/custom-resource/Archive.zip
+*.aws-sam

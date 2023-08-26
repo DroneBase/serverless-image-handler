@@ -2,17 +2,21 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: An AWS Serverless Specification template describing your function.
 Resources:
-  imagehandlerdev:
+  ImageHandler:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: index.handler
-      Runtime: nodejs12.x
+      Runtime: nodejs18.x
       CodeUri: .
-      Description: ''
+      Description: 'Image handler function'
       MemorySize: 512
       Timeout: 60
-      Role: >-
-        arn:aws:iam::757639335249:role/service-role/image-handler-dev-role-n3isq2go
+      AutoPublishAlias: live
+      Policies:
+        - S3ReadPolicy:
+            BucketName: dronebase-development
+        - S3ReadPolicy:
+            BucketName: dronebase-production
       Events:
         Api1:
           Type: Api
@@ -27,3 +31,16 @@ Resources:
           SOURCE_BUCKETS: >-
             dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development
           TRUNCATE_PATH_PREFIX: resized_images/
+  ImageHandlerFuncUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref ImageHandler
+      AuthType: AWS_IAM
+      InvokeMode: RESPONSE_STREAM
+Outputs:
+  StreamingFunction:
+    Description: "Image Handler Lambda Function ARN"
+    Value: !GetAtt ImageHandler.Arn
+  StreamingFunctionURL:
+    Description: "Streaming Lambda Function URL"
+    Value: !GetAtt ImageHandlerFuncUrl.FunctionUrl

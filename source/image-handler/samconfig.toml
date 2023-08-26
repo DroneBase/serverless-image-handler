@@ -1,0 +1,44 @@
+version = 0.1
+
+[default]
+stack_name = "image-handler-sam"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+
+[default.deploy.parameters]
+s3_prefix = "image-handler-sam"
+resolve_s3 = true
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[dev]
+[dev.deploy.parameters]
+stack_name = "image-handler-dev"
+s3_prefix = "image-handler-dev"
+resolve_s3 = true
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+
+[prod]
+[prod.deploy.parameters]
+stack_name = "image-handler-prod"
+s3_prefix = "image-handler-prod"
+resolve_s3 = true
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+
+[production.sync]
+[production.sync.parameters]
+watch = false

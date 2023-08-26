@@ -11,7 +11,8 @@
  *  and limitations under the License.                                                                                *
  *********************************************************************************************************************/
 
-const AWS = require('aws-sdk');
+const {S3Client} = require('@aws-sdk/client-s3')
+const {RekognitionClient} = require('@aws-sdk/client-rekognition')
 const sharp = require('sharp');
 
 class ImageHandler {
@@ -83,7 +84,7 @@ class ImageHandler {
              * For example, if you do `image.modulate({ brightness: 0.5 }).negate()`
              * or `image.negate().module({ brightness: 0.5 })` the result will be the same.
              * It will first negate the image and then apply the brightness changes.
-             * 
+             *
              * This hack apply all changes to the image so you can control the order
              */
             image = sharp(await image.toBuffer())
@@ -126,7 +127,7 @@ class ImageHandler {
             .linear(Math.abs(highlightsTonalWidth))
             .raw()
             .toBuffer({ resolveWithObject: true })
-        
+
         // create a black or white image depending on the tonal width
         // and apply the alpha channel from the threshold image
         const highlightsLayer = sharp({
@@ -192,7 +193,7 @@ class ImageHandler {
      * @param {string} key - The keyname corresponding to the overlay.
      */
     async getOverlayImage(bucket, key) {
-        const s3 = new AWS.S3();
+        const s3 = new S3Client();
         const params = { Bucket: bucket, Key: key };
         // Request
         const request = s3.getObject(params).promise();
@@ -237,7 +238,7 @@ class ImageHandler {
      * confidence decreases for detected faces within the image.
      */
     async getBoundingBox(imageBuffer, faceIndex) {
-        const rekognition = new AWS.Rekognition();
+        const rekognition = new RekognitionClient();
         const params = { Image: { Bytes: imageBuffer }};
         const faceIdx = (faceIndex !== undefined) ? faceIndex : 0;
         // Request

@@ -13,34 +13,50 @@
 
 const ImageRequest = require('./image-request.js');
 const ImageHandler = require('./image-handler.js');
+const util = require('util');
+const stream = require('stream');
+const { Readable } = stream;
+const pipeline = util.promisify(stream.pipeline);
 
-exports.handler = async (event) => {
+/* global awslambda */
+exports.handler = awslambda.streamifyResponse(async (event, responseStream, context) => {
     console.log(event);
     const imageRequest = new ImageRequest();
     const imageHandler = new ImageHandler();
+
+    let requestStream = null
+    let metadata = null
     try {
         const request = await imageRequest.setup(event);
         let etag = request.originalImage.ETag;
         let lastModified = request.originalImage.LastModified;
         const processedRequest = await imageHandler.process(request);
-        const response = {
+        metadata = {
             "statusCode": 200,
             "headers" : getResponseHeaders(false, etag, lastModified),
-            "body": processedRequest,
             "isBase64Encoded": true
         }
-        return response;
+        console.log('processed request')
+        requestStream = Readable.from(Buffer.from(processedRequest));
     } catch (err) {
-        console.log(err);
-        const response = {
+        console.log('Caught Error ', err);
+        metadata = {
             "statusCode": err.status,
-            "headers" : getResponseHeaders(true, undefined, undefined),
-            "body": JSON.stringify(err),
+            "headers": getResponseHeaders(true, undefined, undefined),
             "isBase64Encoded": false
-        }
-        return response;
+        };
+        requestStream = Readable.from(Buffer.from(JSON.stringify(err)))
     }
-}
+
+    if (requestStream && metadata) {
+        responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+        await pipeline(requestStream, responseStream);
+
+        return
+    }
+
+    throw Error('Unable to produce response...')
+})
 
 /**
  * Generates the appropriate set of response headers based on a success
