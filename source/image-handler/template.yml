@@ -10,11 +10,13 @@ Resources:
       CodeUri: .
       Description: 'Image handler function'
       MemorySize: 512
-      Timeout: 60
+      Timeout: 240
       AutoPublishAlias: live
       Policies:
         - S3ReadPolicy:
             BucketName: dronebase-development
+        - S3ReadPolicy:
+            BucketName: dronebase-staging
         - S3ReadPolicy:
             BucketName: dronebase-production
       Events:
@@ -28,9 +30,10 @@ Resources:
           CACHE_CONTROL: max-age=7884000
           CORS_ENABLED: 'Yes'
           CORS_ORIGIN: '*'
+          SOURCE_BUCKET_REGION: 'us-east-1'
           SOURCE_BUCKETS: >-
             dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development
-          TRUNCATE_PATH_PREFIX: resized_images/
+          TRUNCATE_PATH_PREFIX: "resized_images/"
   ImageHandlerFuncUrl:
     Type: AWS::Lambda::Url
     Properties:

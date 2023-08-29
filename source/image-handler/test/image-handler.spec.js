@@ -543,10 +543,10 @@ describe('applyEdits()', function() {
             const originalImage = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAAEAAQDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AfwD/2Q==', 'base64');
             const image = sharp(originalImage, { failOnError: false }).withMetadata();
             const metadata = image.metadata();
-            
+
             const edits = {
                 roundCrop: true,
-                
+
             }
 
             // Act
@@ -565,7 +565,7 @@ describe('applyEdits()', function() {
             const originalImage = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAAEAAQDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AfwD/2Q==', 'base64');
             const image = sharp(originalImage, { failOnError: false }).withMetadata();
             const metadata = image.metadata();
-            
+
             const edits = {
                 roundCrop: {
                     top: 100,
@@ -573,7 +573,7 @@ describe('applyEdits()', function() {
                     rx: 100,
                     ry: 100,
                 },
-                
+
             }
 
             // Act
@@ -940,7 +940,7 @@ describe('getBoundingBox()', function() {
             //Arrange
             const currentImage = Buffer.from('TestImageData');
             const faceIndex = 0;
-        
+
             // Mock
             mockAws.detectFaces.mockImplementationOnce(() => {
                 return {
@@ -955,7 +955,7 @@ describe('getBoundingBox()', function() {
             //Act
             const imageHandler = new ImageHandler(s3, rekognition);
             const result = await imageHandler.getBoundingBox(currentImage, faceIndex);
-            
+
             // Assert
             const expectedResult = {
                 Height: 1,
@@ -964,15 +964,15 @@ describe('getBoundingBox()', function() {
                 Width: 1
             };
             expect(mockAws.detectFaces).toHaveBeenCalledWith({ Image: { Bytes: currentImage }});
-            expect(result).toEqual(expectedResult);  
-        });     
+            expect(result).toEqual(expectedResult);
+        });
     });
     describe('004/boundsGreaterThanImageDimensions', function () {
         it('Should pass if bounds detected go beyond the image dimensions', async function () {
             //Arrange
             const currentImage = Buffer.from('TestImageData');
             const faceIndex = 0;
-        
+
             // Mock
             mockAws.detectFaces.mockImplementationOnce(() => {
                 return {
@@ -994,7 +994,7 @@ describe('getBoundingBox()', function() {
             //Act
             const imageHandler = new ImageHandler(s3, rekognition);
             const result = await imageHandler.getBoundingBox(currentImage, faceIndex);
-            
+
             // Assert
             const expectedResult = {
                 Height: 0.70,
@@ -1003,7 +1003,7 @@ describe('getBoundingBox()', function() {
                 Width: 0.50
             };
             expect(mockAws.detectFaces).toHaveBeenCalledWith({ Image: { Bytes: currentImage }});
-            expect(result).toEqual(expectedResult);  
-        });     
+            expect(result).toEqual(expectedResult);
+        });
     });
 });

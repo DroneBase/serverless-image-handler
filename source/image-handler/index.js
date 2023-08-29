@@ -30,38 +30,47 @@ exports.handler = awslambda.streamifyResponse(async (event, responseStream, cont
         const request = await imageRequest.setup(event);
         let etag = request.originalImage.ETag;
         let lastModified = request.originalImage.LastModified;
+        console.log("image retrieved, processing...")
         const processedRequest = await imageHandler.process(request);
+        console.log("processing imaged completed.")
         metadata = {
             "statusCode": 200,
             "headers" : getResponseHeaders(false, etag, lastModified),
             "isBase64Encoded": true
         }
-        console.log('processed request')
         requestStream = Readable.from(Buffer.from(processedRequest));
     } catch (err) {
-        console.log('Caught Error ', err);
         metadata = {
-            "statusCode": err.status,
+            "statusCode": err.status ?? 500,
             "headers": getResponseHeaders(true, undefined, undefined),
+            "message": err,
             "isBase64Encoded": false
         };
         requestStream = Readable.from(Buffer.from(JSON.stringify(err)))
     }
 
-    if (requestStream && metadata) {
-        responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
-        await pipeline(requestStream, responseStream);
-
-        return
+    console.log("req stream\n", requestStream)
+    console.log("meta\n", metadata)
+    try {
+        if (requestStream && metadata) {
+            responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+            await pipeline(requestStream, responseStream);
+        }
+    } catch (err) {
+        throw Error({
+            status: 500,
+            code: "ErrorResponding",
+            message: "Unable to produce response after processing response."
+        })
     }
-
-    throw Error('Unable to produce response...')
 })
 
 /**
  * Generates the appropriate set of response headers based on a success
  * or error condition.
  * @param {boolean} isErr - has an error been thrown?
+ * @param {string} eTag
+ * @param {string} lastModified
  */
 const getResponseHeaders = (isErr, eTag, lastModified) => {
     const corsEnabled = (process.env.CORS_ENABLED === "Yes");

@@ -46,6 +46,8 @@ class ImageHandler {
         let image = sharp(originalImage);
         const keys = Object.keys(edits);
         const values = Object.values(edits);
+
+        console.log('applying edits...')
         // Apply the image edits
         for (let i = 0; i < keys.length; i++) {
             const key = keys[i];
@@ -71,14 +73,17 @@ class ImageHandler {
                 }
             } else if(key === 'linear') {
                 image.linear(value.a, value.b);
+                console.log('Applied linear')
             } else if (key === 'shadows' || key === 'highlights' || key === 'negate') {
                 // ignored here, they have their special cases after
             } else {
                 image[key](value);
+                console.log('Applied ', key)
             }
         }
 
         if ("negate" in edits) {
+            console.log('Starting negate')
             /**
              * Some changes aren't perform in the order we specify them.
              * For example, if you do `image.modulate({ brightness: 0.5 }).negate()`
@@ -89,13 +94,16 @@ class ImageHandler {
              */
             image = sharp(await image.toBuffer())
             image.negate()
+            console.log('Applied negate')
         }
 
         if ("highlights" in edits || "shadows" in edits) {
+            console.log("Starting shadows/highlights")
             image = await this.addHighlightsAndShadows(image, {
                 highlights: edits.highlights,
                 shadows: edits.shadows,
             })
+            console.log("Applied shadows/highlights")
         }
 
         // Return the modified image

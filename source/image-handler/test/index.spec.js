@@ -13,7 +13,7 @@ jest.mock('aws-sdk', () => {
 });
 
 // Import index.js
-const index = require('../index.js');
+const index = require('../index');
 
 describe('index', function() {
   // Arrange
