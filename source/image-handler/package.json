@@ -8,6 +8,8 @@
   "version": "0.0.1",
   "private": true,
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.398.0",
+    "@aws-sdk/client-s3": "^3.400.0",
     "sharp": "^0.32.5",
     "sinon": "^7.3.2"
   },

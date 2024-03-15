@@ -6,19 +6,22 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs18.x
       CodeUri: .
       Description: 'Image handler function'
       MemorySize: 512
       Timeout: 240
       AutoPublishAlias: live
-      Policies:
-        - S3ReadPolicy:
-            BucketName: dronebase-development
-        - S3ReadPolicy:
-            BucketName: dronebase-staging
-        - S3ReadPolicy:
-            BucketName: dronebase-production
+# Alternative to using a role
+#      Policies:
+#        - S3ReadPolicy:
+#            BucketName: dronebase-development
+#        - S3ReadPolicy:
+#            BucketName: dronebase-staging
+#        - S3ReadPolicy:
+#            BucketName: dronebase-production
+      Role: >-
+        arn:aws:iam::757639335249:role/service-role/image-handler-dev-role-n3isq2go
       Events:
         Api1:
           Type: Api
@@ -33,17 +36,4 @@ Resources:
           SOURCE_BUCKET_REGION: 'us-east-1'
           SOURCE_BUCKETS: >-
             dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development
-          TRUNCATE_PATH_PREFIX: "resized_images/"
-  ImageHandlerFuncUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      TargetFunctionArn: !Ref ImageHandler
-      AuthType: AWS_IAM
-      InvokeMode: RESPONSE_STREAM
-Outputs:
-  StreamingFunction:
-    Description: "Image Handler Lambda Function ARN"
-    Value: !GetAtt ImageHandler.Arn
-  StreamingFunctionURL:
-    Description: "Streaming Lambda Function URL"
-    Value: !GetAtt ImageHandlerFuncUrl.FunctionUrl
+          TRUNCATE_PATH_PREFIX: resized_images/
