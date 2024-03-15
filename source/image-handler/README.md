@@ -16,6 +16,11 @@ For images larges than 6mb, the Lambda function URL must be used. This will stre
 https://<id>.lambda-url.<region>.on.aws/resized_image/
 ```
 
+### SSO
+To run any of the commands below, you must have the correct AWS SSO profile set up. You can find more details in our confluence page here
+
+https://dronebase.atlassian.net/wiki/spaces/ENG/pages/394133505/Accessing+AWS+management+console+with+SSO#Configuring-SSO-for-Engineering-Developers
+
 ## Build
 
 Build the SAM stack in a container. M1/M2 mac are not able to build the sharpJS library currently so building within a container is required.
@@ -24,6 +29,12 @@ Build the SAM stack in a container. M1/M2 mac are not able to build the sharpJS 
 sam build --use-container
 ```
 
+## Local Testing
+
+This will start a local API Gateway and Lambda function to test the image handler.
+```bash
+sam local start-api
+```
 
 ## Deploy
 Deploy the SAM stack for the specified env. See `samconfig.toml` for env specific details.
