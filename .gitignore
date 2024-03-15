@@ -21,6 +21,7 @@
 **/.vscode/settings.json
 demo-ui-config.js
 .idea/*
+**/.aws-sam/*
 
 # System Files
 **/.DS_Store
