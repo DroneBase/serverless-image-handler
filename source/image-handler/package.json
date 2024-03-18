@@ -8,14 +8,14 @@
   "version": "0.0.1",
   "private": true,
   "dependencies": {
-    "sharp": "^0.25.4",
+    "aws-sdk": "^2.1579.0",
+    "sharp": "^0.32.5",
     "sinon": "^7.3.2"
   },
   "devDependencies": {
-    "aws-sdk": "^2.437.0",
     "aws-sdk-mock": "^4.4.0",
-    "nyc": "^15.1.0",
-    "mocha": "^9.1.3"
+    "mocha": "^9.1.3",
+    "nyc": "^15.1.0"
   },
   "scripts": {
     "pretest": "npm install",
@@ -24,7 +24,10 @@
     "build:zip": "zip -rq image-handler.zip . -x template.yml",
     "build:dist": "mkdir dist && mv image-handler.zip dist/",
     "build": "npm run build:init && npm install --production && npm run build:zip && npm run build:dist",
-    "dev": "sam build --use-container; sam local start-api -p 8181"
+    "build:sam": "sam build --use-container",
+    "deploy:dev": "sam deploy --config-env dev",
+    "deploy:prod": "sam deploy --config-env prod",
+    "dev": "npm run build:sam; sam local start-api -p 8181"
   },
   "license": "Apache-2.0"
 }

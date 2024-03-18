@@ -2,15 +2,24 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: An AWS Serverless Specification template describing your function.
 Resources:
-  imagehandlerdev:
+  ImageHandler:
     Type: 'AWS::Serverless::Function'
     Properties:
       Handler: index.handler
-      Runtime: nodejs12.x
+      Runtime: nodejs20.x
       CodeUri: .
-      Description: ''
+      Description: 'Image handler function'
       MemorySize: 512
-      Timeout: 60
+      Timeout: 240
+      AutoPublishAlias: live
+# Alternative to using a role
+#      Policies:
+#        - S3ReadPolicy:
+#            BucketName: dronebase-development
+#        - S3ReadPolicy:
+#            BucketName: dronebase-staging
+#        - S3ReadPolicy:
+#            BucketName: dronebase-production
       Role: >-
         arn:aws:iam::757639335249:role/service-role/image-handler-dev-role-n3isq2go
       Events:
@@ -24,6 +33,7 @@ Resources:
           CACHE_CONTROL: max-age=7884000
           CORS_ENABLED: 'Yes'
           CORS_ORIGIN: '*'
+          SOURCE_BUCKET_REGION: 'us-east-1'
           SOURCE_BUCKETS: >-
             dronebase-production,dronebase-staging,dronebase-uploads-staging,dronebase-uploads-production,dronebase-development
           TRUNCATE_PATH_PREFIX: resized_images/
