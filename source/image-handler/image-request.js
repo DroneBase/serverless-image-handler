@@ -64,7 +64,7 @@ class ImageRequest {
      * @param {String} requestType - Image handler request type.
      */
     parseImageBucket(event, requestType) {
-        if (requestType === "Default") {
+        if (requestType === "Default" || requestType === "Token") {
             // Decode the image request
             const decoded = this.decodeRequest(event);
             if (decoded.bucket !== undefined) {
@@ -103,7 +103,7 @@ class ImageRequest {
      * @param {String} requestType - Image handler request type.
      */
     parseImageEdits(event, requestType) {
-        if (requestType === "Default") {
+        if (requestType === "Default" || requestType === "Token") {
             const decoded = this.decodeRequest(event);
             return decoded.edits;
         } else if (requestType === "Thumbor") {
@@ -128,10 +128,10 @@ class ImageRequest {
      * Parses the name of the appropriate Amazon S3 key corresponding to the
      * original image.
      * @param {String} event - Lambda request body.
-     * @param {String} requestType - Type, either "Default", "Thumbor", or "Custom".
+     * @param {String} requestType - Type, either "Default", "Token", "Thumbor", or "Custom".
      */
     parseImageKey(event, requestType) {
-        if (requestType === "Default") {
+        if (requestType === "Default" || requestType === "Token") {
             // Decode the image request and return the image key
             const decoded = this.decodeRequest(event);
             return decoded.key;
@@ -150,14 +150,37 @@ class ImageRequest {
     }
 
     /**
+     * Returns the base64-encoded image request carried in a validated JWT, or
+     * undefined when the request did not arrive through an API Gateway route
+     * with a JWT authorizer.
+     *
+     * API Gateway populates requestContext.authorizer.jwt only after it has
+     * verified the token's signature, issuer, audience and expiry, so the mere
+     * presence of the claim is proof of validation - the token itself is never
+     * parsed here. Lambda Function URL invocations (the CloudFront path) carry
+     * requestContext.authorizer.iam instead, never .jwt.
+     * @param {Object} event - Lambda request body.
+     */
+    getRequestClaim(event) {
+        return event.requestContext?.authorizer?.jwt?.claims?.request;
+    }
+
+    /**
      * Determines how to handle the request being made based on the URL path
-     * prefix to the image request. Categorizes a request as either "image"
-     * (uses the Sharp library), "thumbor" (uses Thumbor mapping), or "custom"
-     * (uses the rewrite function).
+     * prefix to the image request. Categorizes a request as either "token"
+     * (image request supplied as a JWT claim), "image" (uses the Sharp
+     * library), "thumbor" (uses Thumbor mapping), or "custom" (uses the
+     * rewrite function).
      * @param {Object} event - Lambda request body.
     */
     parseRequestType(event) {
-        let path = event["path"];
+        // A validated JWT carrying the request claim short-circuits path
+        // matching entirely: these requests have no image path to inspect.
+        if (this.getRequestClaim(event) !== undefined) {
+            return 'Token';
+        }
+
+        let path = event.rawPath ?? event["path"];
 
         if (process.env.TRUNCATE_PATH_PREFIX !== undefined) {
             // Allows cloudfront to be shared by adding a prefix/* to behaviour
@@ -190,30 +213,36 @@ class ImageRequest {
     }
 
     /**
-     * Decodes the base64-encoded image request path associated with default
-     * image requests. Provides error handling for invalid or undefined path values.
+     * Decodes the base64-encoded image request associated with default and
+     * token image requests. The encoded value is taken from the JWT request
+     * claim when present, otherwise from the last segment of the URL path.
+     * Provides error handling for invalid or undefined values.
      * @param {Object} event - The proxied request object.
      */
     decodeRequest(event) {
-        const path = event["path"];
-        if (path !== undefined) {
-            const splitPath = path.split("/");
-            const encoded = splitPath[splitPath.length - 1];
-            const toBuffer = Buffer.from(encoded, 'base64');
-            try {
-                return JSON.parse(toBuffer.toString('ascii'));
-            } catch (e) {
+        let encoded = this.getRequestClaim(event);
+
+        if (encoded === undefined) {
+            const path = event.rawPath ?? event["path"];
+            if (path === undefined) {
                 throw ({
                     status: 400,
-                    code: 'DecodeRequest::CannotDecodeRequest',
-                    message: 'The image request you provided could not be decoded. Please check that your request is base64 encoded properly and refer to the documentation for additional guidance.'
+                    code: 'DecodeRequest::CannotReadPath',
+                    message: 'The URL path you provided could not be read. Please ensure that it is properly formed according to the solution documentation.'
                 });
             }
-        } else {
+            const splitPath = path.split("/");
+            encoded = splitPath[splitPath.length - 1];
+        }
+
+        const toBuffer = Buffer.from(encoded, 'base64');
+        try {
+            return JSON.parse(toBuffer.toString('utf8'));
+        } catch (e) {
             throw ({
                 status: 400,
-                code: 'DecodeRequest::CannotReadPath',
-                message: 'The URL path you provided could not be read. Please ensure that it is properly formed according to the solution documentation.'
+                code: 'DecodeRequest::CannotDecodeRequest',
+                message: 'The image request you provided could not be decoded. Please check that your request is base64 encoded properly and refer to the documentation for additional guidance.'
             });
         }
     }
